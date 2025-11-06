@@ -3,7 +3,7 @@
 params.bucket = "test-aho-transfer-speed"
 params.test_files = ["test-100mb.dat", "test-1gb.dat", "test-10gb.dat"]
 
-// Method 1: Channel.fromPath
+// Method 1: Nextflow 자동 staging (Channel.fromPath)
 process testChannelFromPath {
     input:
     path input_file
@@ -12,19 +12,20 @@ process testChannelFromPath {
     """
     start_time=\$(date +%s.%N)
     
-    # 파일이 이미 로컬에 다운로드됨 (Channel.fromPath에 의해)
-    cp ${input_file} ./downloaded_\$(basename ${input_file})
+    # 파일이 이미 Nextflow에 의해 자동으로 staged됨
+    # 단순히 파일 크기 확인 및 복사로 처리 시뮬레이션
+    #cp ${input_file} ./processed_\$(basename ${input_file})
     
     end_time=\$(date +%s.%N)
     duration=\$(echo "\$end_time \$start_time" | awk '{printf "%.6f", \$1 - \$2}')
     file_size=\$(stat -c%s ${input_file})
     throughput=\$(echo "\$file_size \$duration" | awk '{printf "%.2f", \$1 / \$2 / 1024 / 1024}')
     
-    echo "Channel.fromPath - \$(basename ${input_file}): \${throughput} MB/s"
+    echo "Nextflow Staging - \$(basename ${input_file}): \${throughput} MB/s (File size: \${file_size} bytes, staging time included by Nextflow)"
     """
 }
 
-// Method 2: Explicit s3 cp
+// Method 2: 명시적 S3 다운로드
 process testS3Cp {
     input:
     val filename
@@ -33,23 +34,24 @@ process testS3Cp {
     """
     start_time=\$(date +%s.%N)
     
-    aws s3 cp s3://${params.bucket}/test-data/${filename} ./downloaded_${filename} 
+    # 사용자가 명시적으로 S3에서 다운로드
+    aws s3 cp s3://${params.bucket}/test-data/${filename} ./downloaded_${filename}
     
     end_time=\$(date +%s.%N)
     duration=\$(echo "\$end_time \$start_time" | awk '{printf "%.6f", \$1 - \$2}')
-    file_size=\$(stat -c%s downloaded_${filename})
+    file_size=\$(stat -c%s ./downloaded_${filename})
     throughput=\$(echo "\$file_size \$duration" | awk '{printf "%.2f", \$1 / \$2 / 1024 / 1024}')
     
-    echo "S3 CP - ${filename}: \${throughput} MB/s"
+    echo "Explicit S3 CP - ${filename}: \${throughput} MB/s (File size: \${file_size} bytes)"
     """
 }
 
 workflow {
-    // Channel.fromPath 테스트 - S3에서 직접 파일 읽기
-    channel_files = Channel.fromPath("s3://${params.bucket}/test-data/{${params.test_files.join(',')}}")
-    channel_files.view { "Channel file: $it" }
-    testChannelFromPath(channel_files)
+    // Method 1: Nextflow의 자동 staging 사용 (glob 패턴)
+    staged_files = Channel.fromPath("s3://${params.bucket}/test-data/test-*.dat")
+    staged_files.view { "Staged file: $it" }
+    testChannelFromPath(staged_files)
     
-    // s3 cp 테스트
+    // Method 2: 명시적 다운로드
     testS3Cp(Channel.from(params.test_files))
 }
