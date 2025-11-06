@@ -47,6 +47,7 @@ process testS3Cp {
 workflow {
     // Channel.fromPath 테스트 - S3에서 직접 파일 읽기
     channel_files = Channel.fromPath("s3://${params.bucket}/test-data/{${params.test_files.join(',')}}")
+    channel_files.view { "Channel file: $it" }
     testChannelFromPath(channel_files)
     
     // s3 cp 테스트
