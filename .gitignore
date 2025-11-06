@@ -1,2 +1,3 @@
 *.dat
 workflow.zip
+.nextflow*
